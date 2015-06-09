@@ -1,0 +1,106 @@
+---
+title: "Jawbone Analysis for Pratical Machine Learning"
+author: "Jonathan Garcia Lima"
+date: "June 5, 2015"
+output:
+  html_document:
+    pandoc_args: [
+      "+RTS", "-K128m", "-RTS"
+    ]
+---
+
+# Preparing the environment
+
+```{r}
+set.seed(5463654)
+library(caret)
+```
+
+# Loading and cleaning the Data
+
+Now I'll load the data and clean it so that all that's left on my dataset are numeric filled fields.
+I'll remove the 7 first fields that are irrelevant to our analysis (those contain data like the user name and the timestamp of the reading).
+Afterwards I'll convert all the columns that are factors to numeric and then change all NA columns to zero.
+
+```{r, cache=TRUE}
+full <- read.csv("/home/rstudio/pml-training.csv")
+oficialTesting <- read.csv("/home/rstudio/pml-testing.csv")
+clean <- full[,-c(1,2,3,4,5,6,7)]
+
+n <- ncol(clean)-1
+for (i in 1:n) {
+  if (is.factor(clean[,i])){
+    clean[,i] <- as.numeric(clean[,i])
+  }
+}
+
+clean <- clean[,colSums(is.na(clean))==0]
+```
+
+# Training
+
+I'll start doing a training set with 60% of the data that's already classified so that we can measure if the prediction's good through confusion matrix.
+
+```{r, cache=TRUE}
+trainIndex = createDataPartition(clean$classe, p = .6)[[1]]
+training = clean[ trainIndex,]
+testing = clean[-trainIndex,]
+
+fit <- train(classe ~ ., training, method = "rf")
+```
+
+# Confusion Matrix Testing:
+
+```{r, cache=TRUE}
+pred <- predict(fit, testing)
+conf <- confusionMatrix(pred, testing$classe)
+```
+
+Confusion Matrix looks good:
+
+```{r}
+conf$table
+```
+
+```{r}
+conf$byClass
+```
+
+Creating a final fit model:
+
+```{r, cache=TRUE}
+finalFit <- train(classe ~ ., clean, method = "rf")
+```
+
+# Final Prediction:
+
+Applying the same logic to cleanse the oficial testing data:
+
+```{r}
+oficialTestingClean <- oficialTesting[, which(names(oficialTesting) %in% names(clean))]
+
+n <- ncol(oficialTestingClean)-1
+for (i in 1:n) {
+  if (is.factor(oficialTestingClean[,i])){
+    oficialTestingClean[,i] <- as.numeric(oficialTestingClean[,i])
+  }
+}
+
+oficialTestingClean[is.na(oficialTestingClean)] <- 0
+
+finalPred <- predict(finalFit, oficialTestingClean)
+```
+
+Generating the files from the file prediction:
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(finalPred)
+```
